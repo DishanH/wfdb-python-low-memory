@@ -530,7 +530,8 @@ class SignalMixin(object):
         d_nans = _digi_nan(self.fmt)
 
         # To do: choose the minimum return res needed
-        intdtype = "int64"
+        # intdtype = "int64"
+        intdtype = "int16"
 
         # Do inplace conversion and set relevant variables.
         if inplace:
@@ -582,7 +583,11 @@ class SignalMixin(object):
             else:
                 nanlocs = np.isnan(self.p_signal)
                 # Cannot cast dtype to int now because gain is float.
-                d_signal = self.p_signal.copy()
+                # original code (create a copy)
+                # d_signal = self.p_signal.copy()
+                # modified code
+                d_signal = self.p_signal
+
                 np.multiply(d_signal, self.adc_gain, d_signal)
                 np.add(d_signal, self.baseline, d_signal)
                 np.round(d_signal, 0, d_signal)
@@ -2378,18 +2383,46 @@ def wr_dat_file(
             b_write = b_write[:-1]
 
     elif fmt == "16":
+        # original code
+        # # convert to 16 bit two's complement
+        # d_signal[d_signal < 0] = d_signal[d_signal < 0] + 65536
+        # # Split samples into separate bytes using binary masks
+        # b1 = d_signal & [255] * tsamps_per_frame
+        # b2 = (d_signal & [65280] * tsamps_per_frame) >> 8
+        # # Interweave the bytes so that the same samples' bytes are consecutive
+        # b1 = b1.reshape((-1, 1))
+        # b2 = b2.reshape((-1, 1))
+        # b_write = np.concatenate((b1, b2), axis=1)
+        # b_write = b_write.reshape((1, -1))[0]
+        # # Convert to un_signed 8 bit dtype to write
+        # b_write = b_write.astype("uint8")
+
+        # modified code to process in chunks
         # convert to 16 bit two's complement
         d_signal[d_signal < 0] = d_signal[d_signal < 0] + 65536
+
         # Split samples into separate bytes using binary masks
-        b1 = d_signal & [255] * tsamps_per_frame
-        b2 = (d_signal & [65280] * tsamps_per_frame) >> 8
-        # Interweave the bytes so that the same samples' bytes are consecutive
-        b1 = b1.reshape((-1, 1))
-        b2 = b2.reshape((-1, 1))
-        b_write = np.concatenate((b1, b2), axis=1)
-        b_write = b_write.reshape((1, -1))[0]
-        # Convert to un_signed 8 bit dtype to write
-        b_write = b_write.astype("uint8")
+        chunk_size = 1000000
+        b_write = np.zeros((0,), dtype=np.uint8)
+
+        p = 0
+        for i in range(0, len(d_signal), chunk_size):
+            print(p.__str__() + " of " + (int(len(d_signal) / chunk_size)).__str__())
+            p += 1
+            chunk = d_signal[i:i+chunk_size]
+            b1 = chunk & [255] * tsamps_per_frame
+            b2 = (chunk & [65280] * tsamps_per_frame) >> 8
+
+            # Interweave the bytes so that the same samples' bytes are consecutive
+            b1 = b1.reshape((-1, 1))
+            b2 = b2.reshape((-1, 1))
+            chunk_bytes = np.concatenate((b1, b2), axis=1)
+            chunk_bytes = chunk_bytes.reshape((1, -1))[0]
+
+            # Convert to un_signed 8 bit dtype to write
+            chunk_bytes = chunk_bytes.astype("uint8")
+            b_write = np.concatenate((b_write, chunk_bytes))
+
     elif fmt == "24":
         # convert to 24 bit two's complement
         d_signal[d_signal < 0] = d_signal[d_signal < 0] + 16777216
