@@ -2320,7 +2320,9 @@ def wr_dat_file(
                 expand_ch = expand_ch + 1
     else:
         # Create a copy to prevent overwrite
-        d_signal = d_signal.copy()
+        # d_signal = d_signal.copy()
+        # use slice to prevent copy
+        d_signal = d_signal[:]
 
         # Non-expanded format always has 1 sample per frame
         n_sig = d_signal.shape[1]
